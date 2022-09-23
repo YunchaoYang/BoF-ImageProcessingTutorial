@@ -14,7 +14,7 @@ class ObjectDetection:
     Class implements Yolo5 model to make inferences on a youtube video using Opencv2.
     """
 
-    def __init__(self, url, out_file="Labeled_Video.avi"):
+    def __init__(self, url = None, webcamId = 0, out_file="Labeled_Video.mp4"):
         """
         Initializes the class with youtube url and output file.
         :param url: Has to be as youtube URL,on which prediction is made.
@@ -25,7 +25,13 @@ class ObjectDetection:
         self.classes = self.model.names
         self.out_file = out_file
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+        self.webcamId = webcamId
+        
+        if url is not None:
+            self.capture = self.get_video_from_url()
+        elif webcamId is not None:
+            self.capture = self.get_video_from_webcam()
+            
     def get_video_from_url(self):
         """
         Creates a new video streaming object to extract video frame by frame to make prediction on.
@@ -34,6 +40,13 @@ class ObjectDetection:
         play = pafy.new(self._URL).streams[-1]
         assert play is not None
         return cv2.VideoCapture(play.url)
+    
+    def get_video_from_webcam(self):
+        """
+        Creates a new video streaming object to extract video frame by frame to make prediction on.
+        :return: opencv2 video capture object, with lowest quality frame available for video.
+        """
+        return cv2.VideoCapture(self.webcamId)
 
     def load_model(self):
         """
@@ -83,6 +96,10 @@ class ObjectDetection:
 
         return frame
 
+    def destroy(self):          
+        self.cap.release()
+        self.cap.destroyAllWindows()
+        
     def __call__(self):
         """
         This function is called when class is executed, it runs the loop to read the video frame by frame,
@@ -93,18 +110,38 @@ class ObjectDetection:
         assert player.isOpened()
         x_shape = int(player.get(cv2.CAP_PROP_FRAME_WIDTH))
         y_shape = int(player.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        four_cc = cv2.VideoWriter_fourcc(*"MJPG")
+        
+        four_cc = cv2.VideoWriter_fourcc(*'avc1') # cv2.VideoWriter_fourcc(*'H264') # cv2.VideoWriter_fourcc(*'MP4V') # cv2.VideoWriter_fourcc(*"MJPG")  # cv2.VideoWriter_fourcc(*'VP90') 
         out = cv2.VideoWriter(self.out_file, four_cc, 20, (x_shape, y_shape))
+
+        count = 0
         while True:
             start_time = time()
             ret, frame = player.read()
-            assert ret
+            
+            # assert ret
+            # check if frame is None
+            if frame is None:
+                #if True break the infinite loop
+                break
+            
+            count += 1
+            
+            if count > 100:
+                break
+            
             results = self.score_frame(frame)
             frame = self.plot_boxes(results, frame)
             end_time = time()
             fps = 1/np.round(end_time - start_time, 3)
-            print(f"Frames Per Second : {fps}")
+            print(f"Frame #{count}; speed: Frame Per Second : {fps}")
             out.write(frame)
+
+            key = cv2.waitKey(1)
+            if key == ord('q'):
+                break
+        
+        #out.release()
 
 if __name__ == "__main__":
     # Create a new object and execute.
